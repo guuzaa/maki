@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use serde::Deserialize;
 use tracing::{debug, warn};
 
 use crate::ToolOutput;
@@ -31,6 +32,13 @@ pub struct Skill {
     pub description: String,
     pub content: String,
     pub location: PathBuf,
+}
+
+/// Skill frontmatter structure for YAML parsing
+#[derive(Debug, Deserialize)]
+struct SkillFrontmatter {
+    name: String,
+    description: String,
 }
 
 pub fn discover_skills(cwd: &Path) -> Vec<Skill> {
@@ -161,19 +169,13 @@ pub(crate) fn split_frontmatter(content: &str) -> (String, String) {
 }
 
 pub(crate) fn parse_frontmatter(frontmatter: &str, default_name: &str) -> (String, String) {
-    let mut name = default_name.to_string();
-    let mut description = String::new();
-
-    for line in frontmatter.lines() {
-        let line = line.trim();
-        if let Some(value) = line.strip_prefix("name:") {
-            name = value.trim().to_string();
-        } else if let Some(value) = line.strip_prefix("description:") {
-            description = value.trim().to_string();
+    match serde_yaml::from_str::<SkillFrontmatter>(frontmatter) {
+        Ok(fm) => (fm.name, fm.description),
+        Err(e) => {
+            debug!("Failed to parse frontmatter as YAML: {}", e);
+            (default_name.to_string(), String::new())
         }
     }
-
-    (name, description)
 }
 
 #[cfg(test)]
@@ -222,6 +224,27 @@ mod tests {
         "my-awesome-skill",
         ""
         ; "defaults_to_dir_name"
+    )]
+    #[test_case(
+        "---\n# This is a comment\nname: commented-skill\ndescription: Has comments\n---\nBody content",
+        "commented-skill-file",
+        "commented-skill",
+        "Has comments"
+        ; "with_comments"
+    )]
+    #[test_case(
+        "---\nname: multiline-skill\ndescription: |\n  Multi-line\n  description\n---\nBody content",
+        "multiline-skill-file",
+        "multiline-skill",
+        "Multi-line\ndescription"
+        ; "multiline_description"
+    )]
+    #[test_case(
+        "---\nname: folded-skill\ndescription: >\n  This is a folded\n  block scalar\n---\nBody content",
+        "folded-skill-file",
+        "folded-skill",
+        "This is a folded block scalar"
+        ; "folded_block_scalar"
     )]
     fn parse_skill_extracts_fields(
         content: &str,
