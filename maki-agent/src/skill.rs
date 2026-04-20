@@ -37,8 +37,8 @@ pub struct Skill {
 /// Skill frontmatter structure for YAML parsing
 #[derive(Debug, Deserialize)]
 struct SkillFrontmatter {
-    name: String,
-    description: String,
+    name: Option<String>,
+    description: Option<String>,
 }
 
 pub fn discover_skills(cwd: &Path) -> Vec<Skill> {
@@ -170,7 +170,10 @@ pub(crate) fn split_frontmatter(content: &str) -> (String, String) {
 
 pub(crate) fn parse_frontmatter(frontmatter: &str, default_name: &str) -> (String, String) {
     match serde_yaml::from_str::<SkillFrontmatter>(frontmatter) {
-        Ok(fm) => (fm.name, fm.description),
+        Ok(fm) => (
+            fm.name.unwrap_or_else(|| default_name.to_string()),
+            fm.description.unwrap_or_else(|| "".to_string()),
+        ),
         Err(e) => {
             debug!("Failed to parse frontmatter as YAML: {}", e);
             (default_name.to_string(), String::new())
