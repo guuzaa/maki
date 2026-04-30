@@ -108,6 +108,18 @@ Defaults: devstral-latest (strong), mistral-large-latest (medium), mistral-small
 
 Defaults: glm-5-code (strong), glm-4.7-flash (weak), glm-4.7 (medium)
 
+### DeepSeek
+
+- **Env var**: `DEEPSEEK_API_KEY`
+- **API**: `https://api.deepseek.com`
+
+| Tier | Models | Pricing (in/out per 1M tokens) | Context |
+|------|--------|-------------------------------|---------|
+| Medium | **deepseek-v4-flash** (default) | $0.14 / $0.28 | 1M ctx / 384K out |
+| Strong | **deepseek-v4-pro** (default) | ~~$1.74~~ / ~~$3.48~~ <br> $0.435 / $0.87 (75% off until 2026/05/31 15:59 UTC) | 1M ctx / 384K out |
+
+Defaults: deepseek-v4-flash (medium), deepseek-v4-pro (strong)
+
 ### Synthetic
 
 - **Env var**: `SYNTHETIC_API_KEY`

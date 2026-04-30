@@ -44,6 +44,7 @@ An AI coding agent optimized for minimal use of context tokens, while providing 
 * Mistral - `MISTRAL_API_KEY`.
 * Z.AI - `ZHIPU_API_KEY`.
 * Synthetic - `SYNTHETIC_API_KEY`.
+* DeepSeek - `DEEPSEEK_API_KEY`.
 
 **Dynamic providers** - drop an executable script into `~/.maki/providers/` to add custom providers or proxies. See [docs](https://maki.sh/docs/providers/#dynamic-providers) for details.
 
