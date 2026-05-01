@@ -16,6 +16,7 @@ const PROVIDER_PRIORITY: &[ProviderKind] = &[
     ProviderKind::Zai,
     ProviderKind::ZaiCodingPlan,
     ProviderKind::Synthetic,
+    ProviderKind::Deepseek,
 ];
 
 pub fn resolve_model(

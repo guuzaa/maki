@@ -299,6 +299,15 @@ mod tests {
 
     const TIERS: [ModelTier; 3] = [ModelTier::Weak, ModelTier::Medium, ModelTier::Strong];
 
+    impl ModelTier {
+        fn supports_provider(&self, kind: ProviderKind) -> bool {
+            match *self {
+                Self::Weak if kind == ProviderKind::Deepseek => false,
+                _ => true,
+            }
+        }
+    }
+
     #[test_case("no-slash-here", ModelError::InvalidFormat ; "invalid_format")]
     #[test_case("foobar/gpt-4", ModelError::UnsupportedProvider("foobar".into()) ; "unsupported_provider")]
     fn from_spec_errors(spec: &str, expected: ModelError) {
@@ -359,6 +368,9 @@ mod tests {
                 continue;
             }
             for &tier in &TIERS {
+                if !tier.supports_provider(provider) {
+                    continue;
+                }
                 let model = Model::from_tier(provider, tier).unwrap();
                 assert_eq!(model.provider, provider);
                 assert_eq!(model.tier, tier);
@@ -392,6 +404,14 @@ mod tests {
                     .iter()
                     .filter(|e| e.tier == tier && e.default)
                     .count();
+                if !tier.supports_provider(provider) {
+                    assert_eq!(
+                        count, 0,
+                        "{provider}/{tier}: expected exactly 0 default for weak tier, found {count}"
+                    );
+                    continue;
+                }
+
                 assert_eq!(
                     count, 1,
                     "{provider}/{tier}: expected exactly 1 default, found {count}"
