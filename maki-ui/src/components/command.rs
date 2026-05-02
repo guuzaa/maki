@@ -147,6 +147,24 @@ impl CommandPalette {
         let prompts = snap.prompts.clone();
         drop(snap);
 
+        let nucleo = Self::build_nucleo(&custom_commands, &prompts);
+        Self {
+            selected: 0,
+            filtered: Vec::new(),
+            custom: custom_commands,
+            mcp_reader,
+            mcp_prompts: prompts,
+            mcp_generation,
+            nucleo,
+            matcher: Matcher::new(Config::DEFAULT),
+            current_arg_count: 0,
+        }
+    }
+
+    fn build_nucleo(
+        custom_commands: &[CustomCommand],
+        mcp_prompts: &[McpPromptInfo],
+    ) -> Nucleo<CommandItem> {
         let nucleo = Nucleo::new(Config::DEFAULT, Arc::new(|| {}), None, 1);
         let injector = nucleo.injector();
 
@@ -172,7 +190,7 @@ impl CommandPalette {
             });
         }
 
-        for (i, prompt) in prompts.iter().enumerate() {
+        for (i, prompt) in mcp_prompts.iter().enumerate() {
             let item = CommandItem {
                 name: format!("/{}", prompt.display_name),
                 max_args: if prompt.arguments.is_empty() {
@@ -187,17 +205,7 @@ impl CommandPalette {
             });
         }
 
-        Self {
-            selected: 0,
-            filtered: Vec::new(),
-            custom: custom_commands,
-            mcp_reader,
-            mcp_prompts: prompts,
-            mcp_generation,
-            nucleo,
-            matcher: Matcher::new(Config::DEFAULT),
-            current_arg_count: 0,
-        }
+        nucleo
     }
 
     pub fn handle_key(&mut self, key: KeyEvent, input: &str) -> CommandAction {
@@ -241,21 +249,7 @@ impl CommandPalette {
         if snap.generation != self.mcp_generation {
             self.mcp_generation = snap.generation;
             self.mcp_prompts = snap.prompts.clone();
-            let injector = self.nucleo.injector();
-            for (i, prompt) in self.mcp_prompts.iter().enumerate() {
-                let item = CommandItem {
-                    name: format!("/{}", prompt.display_name),
-                    max_args: if prompt.arguments.is_empty() {
-                        0
-                    } else {
-                        usize::MAX
-                    },
-                    command_type: CommandType::McpPrompt(i),
-                };
-                injector.push(item, |item, cols| {
-                    cols[0] = Utf32String::from(item.name.as_str());
-                });
-            }
+            self.nucleo = Self::build_nucleo(&self.custom, &self.mcp_prompts);
         }
         drop(snap);
         let Some(stripped) = input.strip_prefix('/') else {
@@ -755,6 +749,58 @@ mod tests {
         assert_eq!(cmd.args, "my-diff-content");
     }
 
+    #[test]
+    fn mcp_update_clears_old_prompts() {
+        let reader = sample_prompts();
+        let mut p = CommandPalette::new(Arc::from([]), reader);
+
+        p.sync("/");
+        let initial_count = p
+            .filtered
+            .iter()
+            .filter(|f| matches!(f.command_type, CommandType::McpPrompt(_)))
+            .count();
+        assert_eq!(initial_count, 2, "Should have 2 MCP prompts initially");
+
+        let updated_reader = McpSnapshotReader::from_snapshot(McpSnapshot {
+            infos: vec![],
+            prompts: vec![McpPromptInfo {
+                display_name: "myserver:new-prompt".into(),
+                qualified_name: "myserver/new-prompt".into(),
+                description: "A new prompt".into(),
+                arguments: vec![],
+            }],
+            pids: vec![],
+            generation: 1, // Different generation to trigger update
+        });
+
+        p.mcp_reader = updated_reader;
+        p.sync("/");
+
+        let updated_count = p
+            .filtered
+            .iter()
+            .filter(|f| matches!(f.command_type, CommandType::McpPrompt(_)))
+            .count();
+        assert_eq!(
+            updated_count, 1,
+            "Should have only 1 MCP prompt after update"
+        );
+
+        assert!(!p.filtered.is_empty(), "Should have filtered results");
+        let prompt = &p
+            .filtered
+            .iter()
+            .find(|f| matches!(f.command_type, CommandType::McpPrompt(_)))
+            .expect("Should have at least one MCP prompt");
+        match &prompt.command_type {
+            CommandType::McpPrompt(i) => {
+                assert_eq!(p.mcp_prompts[*i].display_name, "myserver:new-prompt");
+            }
+            _ => panic!("Should have MCP prompt"),
+        }
+    }
+
     #[test_case("/cmp", "/compact" ; "compact_fuzzy")]
     #[test_case("/new", "/new" ; "new_exact")]
     #[test_case("/tsk", "/tasks" ; "tasks_fuzzy")]
@@ -768,7 +814,7 @@ mod tests {
             .filtered
             .iter()
             .find(|m| p.item_name(m) == expected_cmd)
-            .expect(&format!("Should find {} for input {}", expected_cmd, input));
+            .unwrap_or_else(|| panic!("Should find {} for input {}", expected_cmd, input));
         // Should have some highlight indices
         assert!(
             !matched.indices.is_empty(),
